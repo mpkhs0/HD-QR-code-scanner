@@ -1,0 +1,1365 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TAG 마스터 관리 서버</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg: #f0f4f8;
+    --surface: #ffffff;
+    --surface2: #f8fafc;
+    --accent: #0055cc;
+    --accent2: #00a86b;
+    --danger: #d93025;
+    --warn: #e8720c;
+    --text: #1a2332;
+    --text2: #5a6a7e;
+    --border: #dde3eb;
+    --shadow: 0 2px 8px rgba(0,0,0,0.08);
+    --radius: 10px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', 'Malgun Gothic', sans-serif;
+    min-height: 100vh;
+  }
+
+  /* HEADER */
+  header {
+    background: var(--accent);
+    color: white;
+    padding: 0 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 60px;
+    box-shadow: 0 2px 12px rgba(0,85,204,0.3);
+  }
+  .logo { font-size: 16px; font-weight: 700; letter-spacing: 1px; }
+  .logo span { opacity: 0.7; font-weight: 400; font-size: 12px; margin-left: 12px; }
+  .header-stats { display: flex; gap: 24px; }
+  .hstat { text-align: center; }
+  .hstat .num { font-size: 20px; font-weight: 700; }
+  .hstat .lbl { font-size: 10px; opacity: 0.75; letter-spacing: 1px; }
+
+  /* LAYOUT */
+  .container { max-width: 1400px; margin: 0 auto; padding: 24px 32px; }
+
+  /* PROGRESS HERO */
+  .hero {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 24px 32px;
+    margin-bottom: 24px;
+    box-shadow: var(--shadow);
+    display: flex;
+    align-items: center;
+    gap: 32px;
+  }
+  .hero-progress { flex: 1; }
+  .hero-title { font-size: 13px; color: var(--text2); letter-spacing: 1px; margin-bottom: 8px; text-transform: uppercase; }
+  .progress-track { background: var(--border); border-radius: 6px; height: 12px; overflow: hidden; }
+  .progress-fill {
+    height: 100%;
+    border-radius: 6px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    transition: width 0.6s ease;
+    position: relative;
+  }
+  .progress-fill::after {
+    content: '';
+    position: absolute;
+    top: 0; right: 0; bottom: 0;
+    width: 30px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4));
+    animation: shimmer 1.5s infinite;
+  }
+  @keyframes shimmer { 0%,100%{opacity:0} 50%{opacity:1} }
+  .progress-label { margin-top: 8px; font-size: 13px; color: var(--text2); }
+  .hero-pct { font-size: 48px; font-weight: 700; color: var(--accent); line-height: 1; }
+  .hero-pct span { font-size: 20px; }
+
+  /* STAT CARDS */
+  .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+  .stat-card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 20px 24px;
+    box-shadow: var(--shadow);
+    border-left: 4px solid var(--border);
+  }
+  .stat-card.done { border-left-color: var(--accent2); }
+  .stat-card.pending { border-left-color: var(--warn); }
+  .stat-card.total { border-left-color: var(--accent); }
+  .stat-card.uploaded { border-left-color: #9b59b6; }
+  .stat-num { font-size: 32px; font-weight: 700; }
+  .stat-label { font-size: 12px; color: var(--text2); margin-top: 4px; }
+
+  /* MAIN GRID */
+  .main-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }
+
+  /* CARDS */
+  .card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 24px;
+    box-shadow: var(--shadow);
+  }
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .card-title { font-size: 14px; font-weight: 600; color: var(--text); }
+  .card-subtitle { font-size: 11px; color: var(--text2); margin-top: 2px; }
+
+  /* BUTTONS */
+  .btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+  .btn:active { transform: translateY(0); }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-success { background: var(--accent2); color: white; }
+  .btn-danger { background: var(--danger); color: white; }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-warn { background: var(--warn); color: white; }
+  .btn-sm { padding: 6px 14px; font-size: 12px; }
+
+  /* UPLOAD ZONE */
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--surface2);
+  }
+  .upload-zone:hover { border-color: var(--accent); background: rgba(0,85,204,0.04); }
+  .upload-zone.drag { border-color: var(--accent); background: rgba(0,85,204,0.08); }
+  .upload-icon { font-size: 36px; margin-bottom: 8px; }
+  .upload-text { font-size: 14px; color: var(--text2); }
+  .upload-sub { font-size: 11px; color: var(--text2); margin-top: 4px; }
+
+  /* TABLE */
+  .table-wrap { overflow-x: auto; max-height: 500px; overflow-y: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th {
+    background: var(--surface2);
+    padding: 10px 12px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text2);
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    position: sticky;
+    top: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  td { padding: 9px 12px; border-bottom: 1px solid var(--bg); }
+  tr:hover td { background: var(--surface2); }
+  tr.done td { background: rgba(0,168,107,0.04); }
+
+  .tag-badge { font-family: 'Courier New', monospace; font-size: 12px; font-weight: 600; }
+  .status-done {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 20px;
+    background: rgba(0,168,107,0.12);
+    color: var(--accent2);
+    font-size: 11px;
+    font-weight: 600;
+    border: 1px solid rgba(0,168,107,0.3);
+  }
+  .status-pending {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 20px;
+    background: rgba(232,114,12,0.1);
+    color: var(--warn);
+    font-size: 11px;
+    font-weight: 600;
+    border: 1px solid rgba(232,114,12,0.3);
+  }
+  .type-badge {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 4px;
+    background: rgba(0,85,204,0.1);
+    color: var(--accent);
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  /* SEARCH / FILTER */
+  .toolbar {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .search-box {
+    flex: 1;
+    min-width: 200px;
+    padding: 8px 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 13px;
+    outline: none;
+    background: var(--surface2);
+  }
+  .search-box:focus { border-color: var(--accent); }
+  select {
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 12px;
+    background: var(--surface2);
+    cursor: pointer;
+    outline: none;
+  }
+
+  /* UPLOAD LOG */
+  .log-scroll {
+    max-height: 200px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  .log-scroll::-webkit-scrollbar { width: 4px; }
+  .log-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  .log-entry {
+    padding: 10px 14px;
+    border-radius: 8px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    margin-bottom: 8px;
+    font-size: 12px;
+  }
+  .log-entry .log-title { font-weight: 600; margin-bottom: 2px; }
+  .log-entry .log-meta { color: var(--text2); font-size: 11px; }
+
+  /* RFQ SCROLL */
+  .rfq-scroll {
+    max-height: 280px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  .rfq-scroll::-webkit-scrollbar { width: 4px; }
+  .rfq-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  /* EXCEL UPLOAD */
+  .upload-zone-excel {
+    border: 2px dashed #00a86b55;
+    border-radius: var(--radius);
+    padding: 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: rgba(0,168,107,0.03);
+  }
+  .upload-zone-excel:hover { border-color: var(--accent2); background: rgba(0,168,107,0.07); }
+
+  /* TOAST */
+  #toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: #1a2332;
+    color: white;
+    padding: 14px 24px;
+    border-radius: 10px;
+    font-size: 13px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    transform: translateY(20px);
+    opacity: 0;
+    transition: all 0.3s;
+    z-index: 999;
+    max-width: 320px;
+  }
+  #toast.show { transform: translateY(0); opacity: 1; }
+  #toast.success { background: var(--accent2); }
+  #toast.error { background: var(--danger); }
+
+  /* DISCIPLINE CHART */
+  .disc-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .disc-label { width: 120px; font-size: 12px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .disc-bar-wrap { flex: 1; background: var(--border); border-radius: 4px; height: 8px; }
+  .disc-bar { height: 100%; border-radius: 4px; background: var(--accent); }
+  .disc-count { font-size: 11px; color: var(--text2); width: 50px; text-align: right; }
+
+  .full-width { grid-column: 1 / -1; }
+
+  .empty-state { text-align: center; padding: 40px; color: var(--text2); font-size: 13px; }
+
+  /* RESPONSIVE */
+  @media (max-width: 900px) {
+    .stat-grid { grid-template-columns: repeat(2, 1fr); }
+    .main-grid { grid-template-columns: 1fr; }
+    .hero { flex-direction: column; gap: 16px; }
+    .container { padding: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">⬡ TAG 마스터 관리 서버 <span>QR Tracking System</span></div>
+  <div class="header-stats">
+    <div class="hstat"><div class="num" id="h-total">0</div><div class="lbl">전체 TAG</div></div>
+    <div class="hstat"><div class="num" id="h-done">0</div><div class="lbl">완료</div></div>
+    <div class="hstat"><div class="num" id="h-pct">0%</div><div class="lbl">진행률</div></div>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- HERO PROGRESS -->
+  <div class="hero">
+    <div class="hero-progress">
+      <div class="hero-title">전체 진행률</div>
+      <div class="progress-track">
+        <div class="progress-fill" id="progress-fill" style="width:0%"></div>
+      </div>
+      <div class="progress-label" id="progress-label">완료 0 / 전체 0</div>
+    </div>
+    <div class="hero-pct" id="hero-pct">0<span>%</span></div>
+  </div>
+
+  <!-- STAT CARDS -->
+  <div class="stat-grid">
+    <div class="stat-card total">
+      <div class="stat-num" id="s-total">0</div>
+      <div class="stat-label">📋 전체 TAG</div>
+    </div>
+    <div class="stat-card done">
+      <div class="stat-num" id="s-done">0</div>
+      <div class="stat-label">✅ 완료</div>
+    </div>
+    <div class="stat-card pending">
+      <div class="stat-num" id="s-pending">0</div>
+      <div class="stat-label">⏳ 미완료</div>
+    </div>
+    <div class="stat-card uploaded">
+      <div class="stat-num" id="s-uploads">0</div>
+      <div class="stat-label">📤 업로드 횟수</div>
+    </div>
+  </div>
+
+  <!-- MAIN GRID -->
+  <div class="main-grid">
+
+    <!-- CSV UPLOAD -->
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">📤 스캔 CSV 업로드</div>
+          <div class="card-subtitle">현장 작업자 CSV 파일을 업로드하여 마스터에 반영</div>
+        </div>
+      </div>
+
+      <div class="upload-zone" id="upload-zone" onclick="document.getElementById('csv-file').click()"
+        ondragover="handleDragOver(event)" ondrop="handleDrop(event)" ondragleave="this.classList.remove('drag')">
+        <div class="upload-icon">📂</div>
+        <div class="upload-text">CSV 파일을 클릭하거나 드래그하여 업로드</div>
+        <div class="upload-sub">scan_register_*.csv</div>
+      </div>
+      <input type="file" id="csv-file" accept=".csv" style="display:none" multiple onchange="handleFileUpload(event)">
+
+      <div style="margin-top:16px;">
+        <div class="card-title" style="margin-bottom:10px; font-size:12px; color:var(--text2);">업로드 이력</div>
+        <div class="log-scroll">
+          <div id="upload-log">
+            <div class="empty-state" style="padding:20px;">업로드 이력 없음</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- EXCEL TAG 추가 / 삭제 -->
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">📗 마스터 TAG 관리</div>
+          <div class="card-subtitle">엑셀로 TAG 추가 / 체크박스로 TAG 삭제</div>
+        </div>
+      </div>
+      <div class="upload-zone-excel" onclick="document.getElementById('excel-file').click()">
+        <div style="font-size:28px; margin-bottom:6px;">📊</div>
+        <div style="font-size:13px; color:var(--text2);">엑셀 파일 클릭하여 TAG 추가</div>
+        <div style="font-size:11px; color:var(--text2); margin-top:4px;">A열(TAG), C열(TYPE), D열(RFQ NO), E열(Discipline)</div>
+      </div>
+      <input type="file" id="excel-file" accept=".xlsx,.xls" style="display:none" onchange="handleExcelUpload(event)">
+      <div style="margin-top:14px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <input type="text" class="search-box" id="del-search" placeholder="삭제할 TAG 검색..." oninput="renderDeleteList()" style="flex:1; min-width:160px;">
+        <button class="btn btn-danger btn-sm" onclick="deleteSelected()">🗑 선택 삭제</button>
+        <button class="btn btn-secondary btn-sm" onclick="selectAllVisible()">전체선택</button>
+        <button class="btn btn-secondary btn-sm" onclick="clearSelection()">선택해제</button>
+      </div>
+      <div style="font-size:11px; color:var(--text2); margin:6px 0 8px;"><span id="del-count">0</span>개 선택됨</div>
+      <div id="delete-list" style="max-height:220px; overflow-y:auto; border:1px solid var(--border); border-radius:8px; padding:4px;"></div>
+    </div>
+
+    <!-- TYPE BREAKDOWN -->
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">📊 유형별 현황</div>
+          <div class="card-subtitle">TYPE / Discipline 기준 완료 현황</div>
+        </div>
+        <button class="btn btn-success btn-sm" onclick="exportMasterCSV()">📥 마스터 CSV 내보내기</button>
+      </div>
+      <div id="type-breakdown"></div>
+      <div style="margin-top:20px; padding-top:16px; border-top:1px solid var(--border);">
+        <div class="card-title" style="font-size:12px; color:var(--text2); margin-bottom:10px;">RFQ NO별 현황</div>
+        <div class="rfq-scroll">
+          <div id="rfq-breakdown"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MASTER TABLE -->
+    <div class="card full-width">
+      <div class="card-header">
+        <div>
+          <div class="card-title">📋 마스터 레지스터</div>
+          <div class="card-subtitle">전체 TAG 목록 및 완료 현황</div>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-secondary btn-sm" onclick="resetMaster()">🔄 초기화</button>
+          <button class="btn btn-success btn-sm" onclick="exportMasterCSV()">📥 내보내기</button>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <input type="text" class="search-box" id="search-box" placeholder="TAG 검색..." oninput="renderTable()">
+        <select id="filter-status" onchange="renderTable()">
+          <option value="all">전체 상태</option>
+          <option value="done">완료</option>
+          <option value="pending">미완료</option>
+        </select>
+        <select id="filter-type" onchange="renderTable()">
+          <option value="all">전체 TYPE</option>
+          <option value="Type1">Type1</option>
+          <option value="Type2">Type2</option>
+          <option value="Type3">Type3</option>
+        </select>
+        <span id="table-count" style="font-size:12px; color:var(--text2); white-space:nowrap;"></span>
+      </div>
+
+      <div class="table-wrap">
+        <table id="master-table">
+          <thead>
+            <tr>
+              <th>TAG</th>
+              <th>TYPE</th>
+              <th>RFQ NO</th>
+              <th>Discipline</th>
+              <th>상태</th>
+              <th>스캔일시</th>
+              <th>스캐너</th>
+            </tr>
+          </thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ─── MASTER DATA ────────────────────────────────────────────────────
+const MASTER_TAGS = [
+  {"TAG":"101290-ABJ-20130","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-ABJ-20140","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-ABJ-20640","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-AE-20601","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-AE-20602","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-AE-20603","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-AT-20601","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-AT-20602","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-AT-20603","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-EAH-20410","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-EAH-20720","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-EPNL-20200","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-EPNL-20600","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FE-20101","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FE-20111","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FE-20121","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FE-20201","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FE-202141","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FE-202142","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FE-202143","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FE-202144","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FE-202145","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FE-20216","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FE-205111","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FE-205112","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FE-205113","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FE-205114","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FE-205121","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FE-205122","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FE-205123","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FE-205124","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FE-205131","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FE-205132","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FE-205133","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FE-205134","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FE-20601","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FE-20611","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FE-20621","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FE-20661","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FE-21031","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FE-21032","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FST-20101","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FST-20111","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FST-20121","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FST-20611","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FST-20621","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FT-20201","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FT-202141","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FT-202142","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FT-202143","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FT-202144","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FT-202145","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FT-20216","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FT-205111","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FT-205112","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FT-205113","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FT-205114","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FT-205121","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FT-205122","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FT-205123","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FT-205124","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FT-205131","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FT-205132","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FT-205133","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FT-205134","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FT-20601","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FT-20661","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FT-21031","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FT-21032","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FV-202141","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FV-202142","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FV-202143","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FV-202144","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FV-202145","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FV-205111A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FV-205111B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FV-205112A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FV-205112B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FV-205113A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FV-205113B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FV-205114A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FV-205114B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FV-20601","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FV-206511","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FV-206512","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FV-206513","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FV-206514","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-FV-20661","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-HAP-20630","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-LST-20642","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-LT-20641","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-MAJ-20210A","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-MAJ-20210B","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-MAJ-20220A","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-MAJ-20220B","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-MAJ-20230A","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-MAJ-20230B","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-MAJ-20240A","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-MAJ-20240B","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-MAJ-20250A","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-MAJ-20250B","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-MAJ-20660","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-MAJ-21010","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-MAJ-21020","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-MAJ-80035A","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-MAJ-80035B","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-MBL-21030","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-MBM-20650","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PAT-20710","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PAT-20720","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PBE-20110","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PBE-20120","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PBE-20310","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PBE-20410","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PBE-20610","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PBE-20620","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PCV-20101","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PCV-20201","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PCV-20641","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PCV-20642","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PCV-20643","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PCV-20644","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PDT-20601","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PDT-21035","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PDT-21036","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PPNL-20210","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PPNL-20211","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PPNL-20500","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PST-20101","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PST-20611","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PST-20621","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PSV-202131","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PSV-202132","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PSV-202133","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PSV-202134","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PSV-202135","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PSV-20602","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PSV-20603","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PSV-21031A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PSV-21031B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PSV-21032","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-20101","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-20201","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-20202","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-202111A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-202111B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-202112A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-202112B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-202113A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-202113B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-202114A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-202114B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-202115A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-202115B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-202121A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-202121B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-202122A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-202122B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-202123A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-202123B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-202124A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-202124B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-202125A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-202125B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-205111A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-205111B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-205112A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-205112B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-205113A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-205113B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-205114A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-205114B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-205121A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-205121B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-205122A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-205122B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-205123A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-205123B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-205124A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-205124B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-205131","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-205132","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-205133","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-205134","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-205151","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-205152","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-205153","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-205154","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-20661","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-20662","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-21031","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-21032","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PT-21033","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PV-20202","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PV-21033A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-PV-21033B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-RME-20110","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-RME-20120","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-RME-20310","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-RME-20410","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-RME-20610","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-RME-20620","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-RME-20710","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-RME-20720","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-RME-21010","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-RME-21020","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-TST-20642","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-TT-20201","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-TT-20641","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-VT-20311A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-VT-20311B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-VT-20311C","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-VT-20311D","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-VT-20311E","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-VT-20311F","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-VT-20311G","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-VT-20311H","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-VT-20311I","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-VT-20311J","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-VT-20311K","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-VT-20411A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-VT-20411B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-VT-20411C","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-VT-20411D","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-VT-20411E","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-VT-20411F","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-VT-20411G","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-VT-20411H","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-VT-20411I","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-VT-20411J","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-VT-20411K","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-VT-20711A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-VT-20711B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-VT-20711C","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-VT-20711D","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-VT-20721A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-VT-20721B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-VT-20721C","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-20101","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-20111","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-20112","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-20113","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-20121","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-20122","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-20123","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202111A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202111B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202112A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202112B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202113A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202113B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202114A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202114B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202115A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202115B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202121","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202122","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202123","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202124","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202125","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202131A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202131B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202132A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202132B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202133A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202133B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202134A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202134B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202135A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202135B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202141","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202142","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202143","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202144","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202145","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202151","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202152","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202153","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202154","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202155","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-20216","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-20217","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202171","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202172","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202173","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202174","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202175","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202181","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202182","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202183","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202184","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202185","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202191","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202192","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202193","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202194","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-202195","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-205111","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-205112","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-205113","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-205114","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-205121","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-205122","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-205123","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-205124","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-20631","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-20644","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-20662","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-20663","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-XV-20664","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-ZZZ-20100","TYPE":"Type3","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-ZZZ-20200","TYPE":"Type3","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-ZZZ-20500","TYPE":"Type3","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-ZZZ-20600","TYPE":"Type3","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101290-ZZZ-21000","TYPE":"Type3","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-ABJ-35010","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-ABJ-35020","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-ABJ-35030","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-ABJ-35040","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-ABJ-35050","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-ABJ-35060","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-ABJ-35070","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-ABJ-35080","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-ABJ-35090","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-FE-35011","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-FE-35021","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-FE-35031","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-FE-35041","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-FE-35042","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-FE-35043","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-FE-35051","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-FE-35061","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-FE-35071","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-FE-35081","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-FE-35082","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-FE-35091","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-FST-35011","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-FST-35021","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-FST-35031","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-FST-35041","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-FST-35042","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-FST-35043","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-FST-35051","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-FST-35061","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-FST-35071","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-FST-35081","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-FST-35082","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-FST-35091","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-FT-35011","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-FT-35021","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-LST-35011","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-LST-35021","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-LST-35031","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-LST-35041","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-LST-35051","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-LST-35061","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-LST-35071","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-LST-35081","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-LST-35091","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PBE-35110A","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PBE-35110B","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PBE-35120A","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PBE-35120B","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PBE-35130A","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PBE-35130B","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PBE-35130C","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PBE-35140A","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PBE-35140B","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PBE-35140C","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PBE-35150","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PBE-35160","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PBE-35170D","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PBE-35180D","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PBE-35190A","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PBE-35190B","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PBE-35200A","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PBE-35200B","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PBE-35210","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PBE-35220","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PBE-35230","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PBE-35240","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PCV-35130","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PCV-35140","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PCV-35150","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PCV-35160","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PPNL-30000","TYPE":"Type2","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35111A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35111B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35112A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35112B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35121A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35121B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35122A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35122B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35131A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35131B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35132A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35132B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35133A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35133B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35141A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35141B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35142A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35142B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35143A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35143B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35151A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35151B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35161A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35161B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35171A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35171B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35181A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35181B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35191","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35192A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35192B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35201","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35202A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35202B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35211A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35211B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35221A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35221B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35231A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35231B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35241A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PST-35241B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PSV-35111","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PSV-35112","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PSV-35121","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PSV-35122","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PSV-35131","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PSV-35132","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PSV-35133","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PSV-35141","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PSV-35142","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PSV-35143","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PSV-35151","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PSV-35161","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PSV-35171","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PSV-35181","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PSV-35192","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PSV-35202","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PSV-35211","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PSV-35221","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PSV-35231","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-PSV-35241","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-RME-35110A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-RME-35110B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-RME-35120A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-RME-35120B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-RME-35130A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-RME-35130B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-RME-35130C","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-RME-35140A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-RME-35140B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-RME-35140C","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-RME-35150","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-RME-35160","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-RME-35170D","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-RME-35180D","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-RME-35190A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-RME-35190B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-RME-35200A","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-RME-35200B","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-RME-35210","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-RME-35220","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-RME-35230","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-RME-35240","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-XV-35011","TYPE":"Type1","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-ZZZ-35000","TYPE":"Type3","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"},
+  {"TAG":"101420-ZZZ-37000","TYPE":"Type3","RFQ NO":"1Q-52","Discipline":"MECH260319_1Q52"}
+];
+
+// ─── STATE ──────────────────────────────────────────────────────────
+let masterRegister = {}; // TAG -> { ...info, scanTime, scanner, status }
+let uploadLog = [];
+let uploadCount = 0;
+
+const tagMap = {};
+MASTER_TAGS.forEach(t => tagMap[t.TAG] = t);
+const BUILTIN_TAG_SET = new Set(MASTER_TAGS.map(t => t.TAG));
+
+// ─── PERSIST ────────────────────────────────────────────────────────
+function saveState() {
+  try {
+    localStorage.setItem('srv_master', JSON.stringify(masterRegister));
+    localStorage.setItem('srv_log', JSON.stringify(uploadLog));
+    localStorage.setItem('srv_upload_count', uploadCount);
+    localStorage.setItem('srv_extra_tags', JSON.stringify(
+      MASTER_TAGS.filter(t => !BUILTIN_TAG_SET.has(t.TAG))
+    ));
+    localStorage.setItem('srv_deleted_tags', JSON.stringify(
+      [...BUILTIN_TAG_SET].filter(tag => !MASTER_TAGS.find(t => t.TAG === tag))
+    ));
+  } catch(e) {}
+}
+
+function loadState() {
+  try {
+    const m = localStorage.getItem('srv_master');
+    if (m) masterRegister = JSON.parse(m);
+    const l = localStorage.getItem('srv_log');
+    if (l) uploadLog = JSON.parse(l);
+    const c = localStorage.getItem('srv_upload_count');
+    if (c) uploadCount = parseInt(c) || 0;
+
+    // 삭제된 내장 TAG 제거
+    const deleted = localStorage.getItem('srv_deleted_tags');
+    if (deleted) {
+      const delSet = new Set(JSON.parse(deleted));
+      for (let i = MASTER_TAGS.length - 1; i >= 0; i--) {
+        if (delSet.has(MASTER_TAGS[i].TAG)) MASTER_TAGS.splice(i, 1);
+      }
+    }
+
+    // 엑셀로 추가된 TAG 복원
+    const extra = localStorage.getItem('srv_extra_tags');
+    if (extra) {
+      JSON.parse(extra).forEach(t => {
+        if (!MASTER_TAGS.find(m => m.TAG === t.TAG)) {
+          MASTER_TAGS.push(t);
+          tagMap[t.TAG] = t;
+        }
+      });
+    }
+  } catch(e) {}
+}
+
+// ─── CSV UPLOAD ──────────────────────────────────────────────────────
+function handleDragOver(e) {
+  e.preventDefault();
+  document.getElementById('upload-zone').classList.add('drag');
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('upload-zone').classList.remove('drag');
+  const files = Array.from(e.dataTransfer.files).filter(f => f.name.endsWith('.csv'));
+  if (files.length) processFiles(files);
+}
+
+function handleFileUpload(event) {
+  const files = Array.from(event.target.files);
+  processFiles(files);
+  event.target.value = '';
+}
+
+function processFiles(files) {
+  let pending = files.length;
+  let totalNew = 0;
+  let totalOverwrite = 0;
+
+  files.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const { newCount, overCount } = mergeCSV(e.target.result, file.name);
+      totalNew += newCount;
+      totalOverwrite += overCount;
+      pending--;
+      if (pending === 0) {
+        uploadCount += files.length;
+        saveState();
+        refreshAll();
+        showToast(`✅ ${files.length}개 파일 업로드 완료\n신규 ${totalNew}건 / 덮어쓰기 ${totalOverwrite}건`, 'success');
+      }
+    };
+    reader.readAsText(file, 'UTF-8');
+  });
+}
+
+function mergeCSV(text, filename) {
+  const lines = text.split('\n').filter(l => l.trim());
+  if (lines.length < 2) return { newCount: 0, overCount: 0 };
+
+  const headers = lines[0].split(',').map(h => h.replace(/"/g,'').trim());
+  const tagIdx = headers.findIndex(h => h === 'TAG');
+  const typeIdx = headers.findIndex(h => h === 'TYPE');
+  const rfqIdx = headers.findIndex(h => h === 'RFQ NO');
+  const discIdx = headers.findIndex(h => h === 'Discipline');
+  const timeIdx = headers.findIndex(h => h === '스캔일시');
+  const scannerIdx = headers.findIndex(h => h === '스캐너');
+  const statusIdx = headers.findIndex(h => h === '상태');
+
+  if (tagIdx < 0) return { newCount: 0, overCount: 0 };
+
+  let newCount = 0, overCount = 0;
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(',').map(c => c.replace(/"/g,'').trim());
+    const tag = cols[tagIdx];
+    if (!tag || !tagMap[tag]) continue;
+
+    const isNew = !masterRegister[tag];
+    masterRegister[tag] = {
+      TAG: tag,
+      TYPE: typeIdx >= 0 ? cols[typeIdx] : tagMap[tag].TYPE,
+      'RFQ NO': rfqIdx >= 0 ? cols[rfqIdx] : tagMap[tag]['RFQ NO'],
+      Discipline: discIdx >= 0 ? cols[discIdx] : tagMap[tag].Discipline,
+      scanTime: timeIdx >= 0 ? cols[timeIdx] : '-',
+      scanner: scannerIdx >= 0 ? cols[scannerIdx] : '-',
+      status: statusIdx >= 0 ? cols[statusIdx] : '완료'
+    };
+    if (isNew) newCount++; else overCount++;
+  }
+
+  // Log entry
+  const now = new Date().toLocaleString('ko-KR');
+  uploadLog.unshift({
+    filename,
+    time: now,
+    newCount,
+    overCount,
+    total: newCount + overCount
+  });
+  if (uploadLog.length > 20) uploadLog = uploadLog.slice(0, 20);
+
+  return { newCount, overCount };
+}
+
+// ─── EXPORT ──────────────────────────────────────────────────────────
+function exportMasterCSV() {
+  const headers = ['TAG', 'TYPE', 'RFQ NO', 'Discipline', '상태', '스캔일시', '스캐너'];
+  const rows = MASTER_TAGS.map(t => {
+    const r = masterRegister[t.TAG];
+    if (r) {
+      return [r.TAG, r.TYPE, r['RFQ NO'], r.Discipline, r.status || '완료', r.scanTime || '-', r.scanner || '-'];
+    } else {
+      return [t.TAG, t.TYPE, t['RFQ NO'], t.Discipline, '미완료', '', ''];
+    }
+  }).map(row => row.map(v => `"${v}"`).join(','));
+
+  const csv = '\uFEFF' + [headers.join(','), ...rows].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const now = new Date().toISOString().slice(0,16).replace('T','_').replace(':','');
+  a.href = url;
+  a.download = `master_register_${now}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('✅ 마스터리스트 CSV 내보내기 완료', 'success');
+}
+
+function resetMaster() {
+  if (!confirm('⚠️ 마스터 레지스터를 전체 초기화합니다.\n업로드 이력도 삭제됩니다.\n계속하시겠습니까?')) return;
+  masterRegister = {};
+  uploadLog = [];
+  uploadCount = 0;
+  localStorage.clear();
+  refreshAll();
+  showToast('초기화 완료', '');
+}
+
+// ─── EXCEL UPLOAD ────────────────────────────────────────────────────
+function handleExcelUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+      let added = 0, skipped = 0;
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        const tag = (row[0] || '').toString().trim().toUpperCase();
+        const type = (row[2] || '').toString().trim();
+        const rfq = (row[3] || '').toString().trim();
+        const disc = (row[4] || '').toString().trim();
+        if (!tag) continue;
+        const exists = MASTER_TAGS.find(t => t.TAG === tag);
+        if (exists) { skipped++; continue; }
+        MASTER_TAGS.push({ TAG: tag, TYPE: type || 'Type1', 'RFQ NO': rfq || '-', Discipline: disc || '-' });
+        tagMap[tag] = MASTER_TAGS[MASTER_TAGS.length - 1];
+        added++;
+      }
+      saveState();
+      refreshAll();
+      showToast('✅ 엑셀 업로드 완료 - 추가 ' + added + '건, 중복 ' + skipped + '건', 'success');
+    } catch(err) {
+      showToast('❌ 엑셀 파일 읽기 실패. xlsx/xls 파일인지 확인하세요.', 'error');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+  event.target.value = '';
+}
+
+// ─── TAG 삭제 ─────────────────────────────────────────────────────────
+let selectedForDelete = new Set();
+
+function renderDeleteList() {
+  const search = (document.getElementById('del-search').value || '').trim().toUpperCase();
+  const list = document.getElementById('delete-list');
+  const filtered = MASTER_TAGS.filter(t => !search || t.TAG.includes(search));
+  if (filtered.length === 0) {
+    list.innerHTML = '<div class="empty-state" style="padding:16px;">결과 없음</div>';
+    return;
+  }
+  list.innerHTML = filtered.map(t => {
+    const checked = selectedForDelete.has(t.TAG) ? 'checked' : '';
+    const isDone = masterRegister[t.TAG] ? '<span style="color:var(--accent2);font-size:10px;"> ✅완료</span>' : '';
+    return `<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:12px;" onmouseover="this.style.background='#f0f4f8'" onmouseout="this.style.background=''">
+      <input type="checkbox" ${checked} onchange="toggleDelete('${t.TAG}',this.checked)">
+      <span style="font-family:monospace;">${t.TAG}</span>
+      <span style="color:var(--text2);font-size:10px;">${t.TYPE}</span>
+      ${isDone}</label>`;
+  }).join('');
+  document.getElementById('del-count').textContent = selectedForDelete.size;
+}
+
+function toggleDelete(tag, checked) {
+  if (checked) selectedForDelete.add(tag);
+  else selectedForDelete.delete(tag);
+  document.getElementById('del-count').textContent = selectedForDelete.size;
+}
+
+function selectAllVisible() {
+  const search = (document.getElementById('del-search').value || '').trim().toUpperCase();
+  MASTER_TAGS.filter(t => !search || t.TAG.includes(search)).forEach(t => selectedForDelete.add(t.TAG));
+  renderDeleteList();
+}
+
+function clearSelection() {
+  selectedForDelete.clear();
+  renderDeleteList();
+}
+
+function deleteSelected() {
+  if (selectedForDelete.size === 0) { alert('삭제할 TAG를 선택하세요.'); return; }
+  if (!confirm('선택한 ' + selectedForDelete.size + '개 TAG를 마스터에서 삭제합니다. 완료된 스캔 데이터도 함께 삭제됩니다. 계속하시겠습니까?')) return;
+  selectedForDelete.forEach(tag => {
+    const idx = MASTER_TAGS.findIndex(t => t.TAG === tag);
+    if (idx >= 0) MASTER_TAGS.splice(idx, 1);
+    delete tagMap[tag];
+    delete masterRegister[tag];
+  });
+  selectedForDelete.clear();
+  saveState();
+  refreshAll();
+  showToast('🗑 삭제 완료', 'success');
+}
+
+// ─── RENDER ──────────────────────────────────────────────────────────
+function refreshAll() {
+  updateStats();
+  renderBreakdown();
+  renderTable();
+  renderUploadLog();
+  renderDeleteList();
+}
+
+function updateStats() {
+  const total = MASTER_TAGS.length;
+  const done = Object.keys(masterRegister).length;
+  const pending = total - done;
+  const pct = total ? Math.round(done / total * 100) : 0;
+
+  document.getElementById('h-total').textContent = total;
+  document.getElementById('h-done').textContent = done;
+  document.getElementById('h-pct').textContent = pct + '%';
+  document.getElementById('s-total').textContent = total;
+  document.getElementById('s-done').textContent = done;
+  document.getElementById('s-pending').textContent = pending;
+  document.getElementById('s-uploads').textContent = uploadCount;
+  document.getElementById('progress-fill').style.width = pct + '%';
+  document.getElementById('progress-label').textContent = `완료 ${done} / 전체 ${total}`;
+  document.getElementById('hero-pct').innerHTML = `${pct}<span>%</span>`;
+}
+
+function renderBreakdown() {
+  // Type breakdown
+  const typeGroups = {};
+  MASTER_TAGS.forEach(t => {
+    if (!typeGroups[t.TYPE]) typeGroups[t.TYPE] = { total: 0, done: 0 };
+    typeGroups[t.TYPE].total++;
+    if (masterRegister[t.TAG]) typeGroups[t.TYPE].done++;
+  });
+
+  const typeEl = document.getElementById('type-breakdown');
+  typeEl.innerHTML = Object.entries(typeGroups).sort((a,b) => b[1].total - a[1].total).map(([type, g]) => {
+    const pct = Math.round(g.done / g.total * 100);
+    return `<div class="disc-row">
+      <div class="disc-label"><strong>${type}</strong></div>
+      <div class="disc-bar-wrap"><div class="disc-bar" style="width:${pct}%"></div></div>
+      <div class="disc-count">${g.done}/${g.total}</div>
+    </div>`;
+  }).join('');
+
+  // RFQ breakdown
+  const rfqGroups = {};
+  MASTER_TAGS.forEach(t => {
+    const k = t['RFQ NO'];
+    if (!rfqGroups[k]) rfqGroups[k] = { total: 0, done: 0 };
+    rfqGroups[k].total++;
+    if (masterRegister[t.TAG]) rfqGroups[k].done++;
+  });
+
+  const rfqEl = document.getElementById('rfq-breakdown');
+  rfqEl.innerHTML = Object.entries(rfqGroups).map(([rfq, g]) => {
+    const pct = Math.round(g.done / g.total * 100);
+    return `<div class="disc-row">
+      <div class="disc-label">${rfq}</div>
+      <div class="disc-bar-wrap"><div class="disc-bar" style="width:${pct}%; background: var(--accent2);"></div></div>
+      <div class="disc-count">${g.done}/${g.total}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderTable() {
+  const search = document.getElementById('search-box').value.trim().toUpperCase();
+  const statusFilter = document.getElementById('filter-status').value;
+  const typeFilter = document.getElementById('filter-type').value;
+
+  const filtered = MASTER_TAGS.filter(t => {
+    if (search && !t.TAG.includes(search)) return false;
+    const isDone = !!masterRegister[t.TAG];
+    if (statusFilter === 'done' && !isDone) return false;
+    if (statusFilter === 'pending' && isDone) return false;
+    if (typeFilter !== 'all' && t.TYPE !== typeFilter) return false;
+    return true;
+  });
+
+  document.getElementById('table-count').textContent = `${filtered.length}건 표시`;
+
+  const tbody = document.getElementById('table-body');
+  tbody.innerHTML = filtered.map(t => {
+    const r = masterRegister[t.TAG];
+    const isDone = !!r;
+    return `<tr class="${isDone ? 'done' : ''}">
+      <td><span class="tag-badge">${t.TAG}</span></td>
+      <td><span class="type-badge">${t.TYPE}</span></td>
+      <td>${t['RFQ NO']}</td>
+      <td style="font-size:11px;">${t.Discipline}</td>
+      <td>${isDone ? `<span class="status-done">✅ 완료</span>` : `<span class="status-pending">⏳ 미완료</span>`}</td>
+      <td style="font-size:11px;">${r ? r.scanTime || '-' : '-'}</td>
+      <td style="font-size:11px;">${r ? r.scanner || '-' : '-'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderUploadLog() {
+  const el = document.getElementById('upload-log');
+  if (uploadLog.length === 0) {
+    el.innerHTML = '<div class="empty-state" style="padding:20px;">업로드 이력 없음</div>';
+    return;
+  }
+  el.innerHTML = uploadLog.slice(0, 5).map(l => `
+    <div class="log-entry">
+      <div class="log-title">📄 ${l.filename}</div>
+      <div class="log-meta">${l.time} &nbsp;|&nbsp; 신규 ${l.newCount}건, 덮어쓰기 ${l.overCount}건 (합계 ${l.total}건)</div>
+    </div>
+  `).join('') + (uploadLog.length > 5 ? `<div style="font-size:11px;color:var(--text2);text-align:center;padding:4px;">+ ${uploadLog.length - 5}개 더 있음 (스크롤)</div>` : '');
+}
+
+// ─── TOAST ──────────────────────────────────────────────────────────
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `show ${type}`;
+  setTimeout(() => t.className = '', 3000);
+}
+
+// ─── INIT ──────────────────────────────────────────────────────────
+loadState();
+refreshAll();
+</script>
+</body>
+</html>
