@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>TAG 스캐너</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<script src="https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js"></script>
 <style>
   :root {
     --bg: #0a0f1e;
@@ -983,54 +983,49 @@ async function toggleCamera() {
   }
 }
 
+let zxingReader = null;
+
 async function startCamera() {
   try {
-    videoStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
-    });
+    const hints = new Map();
+    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+    zxingReader = new ZXing.BrowserQRCodeReader(hints);
+
     const video = document.getElementById('video');
-    video.srcObject = videoStream;
     cameraActive = true;
     document.getElementById('btn-camera').textContent = '⏹ 카메라 중지';
     const status = document.getElementById('scanner-status');
     status.className = 'scanner-status active';
     status.innerHTML = '<span class="dot"></span>스캔 중...';
-    requestAnimationFrame(scanFrame);
+
+    await zxingReader.decodeFromConstraints(
+      { video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } },
+      video,
+      (result, err) => {
+        if (result && !scanCooldown) {
+          processTag(result.getText().trim());
+          scanCooldown = true;
+          setTimeout(() => { scanCooldown = false; }, 2500);
+        }
+      }
+    );
   } catch(e) {
     showToast('카메라 접근 권한이 필요합니다.', 'unknown');
+    cameraActive = false;
+    document.getElementById('btn-camera').textContent = '📷 카메라 시작';
   }
 }
 
 function stopCamera() {
-  if (videoStream) {
-    videoStream.getTracks().forEach(t => t.stop());
-    videoStream = null;
+  if (zxingReader) {
+    zxingReader.reset();
+    zxingReader = null;
   }
   cameraActive = false;
   document.getElementById('btn-camera').textContent = '📷 카메라 시작';
   const status = document.getElementById('scanner-status');
   status.className = 'scanner-status';
   status.innerHTML = '<span class="dot"></span>카메라 대기 중';
-}
-
-function scanFrame() {
-  if (!cameraActive) return;
-  const video = document.getElementById('video');
-  const canvas = document.getElementById('canvas');
-  if (video.readyState === video.HAVE_ENOUGH_DATA) {
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0);
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
-    if (code && !scanCooldown) {
-      processTag(code.data.trim());
-      scanCooldown = true;
-      setTimeout(() => { scanCooldown = false; }, 2500);
-    }
-  }
-  requestAnimationFrame(scanFrame);
 }
 
 // ─── TAG PROCESSING ────────────────────────────────────────────────
