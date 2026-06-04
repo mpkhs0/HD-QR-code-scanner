@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>TAG 스캐너</title>
+<script src="https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0f1e;
+    --surface: #111827;
+    --surface2: #1a2235;
+    --accent: #00d4aa;
+    --accent2: #0099ff;
+    --danger: #ff4757;
+    --warn: #ffa502;
+    --text: #e8f0fe;
+    --text2: #8a9bb5;
+    --border: #1e2d45;
+    --radius: 12px;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { background:var(--bg); color:var(--text); font-family:'Courier New',monospace; min-height:100vh; display:flex; flex-direction:column; }
+
+  header { background:var(--surface); border-bottom:1px solid var(--border); padding:14px 20px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; }
+  .logo { font-size:13px; font-weight:bold; color:var(--accent); letter-spacing:2px; text-transform:uppercase; }
+  .stats-bar { display:flex; gap:12px; font-size:11px; color:var(--text2); }
+  .stat-item span { color:var(--accent); font-weight:bold; }
+
+  .tabs { display:flex; background:var(--surface); border-bottom:1px solid var(--border); }
+  .tab { flex:1; padding:12px; text-align:center; font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--text2); cursor:pointer; border-bottom:2px solid transparent; transition:all 0.2s; }
+  .tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+
+  .page { display:none; flex:1; overflow-y:auto; padding:16px; }
+  .page.active { display:block; }
+
+  /* 카메라 */
+  .camera-container { position:relative; width:100%; max-width:400px; margin:0 auto 16px; border-radius:var(--radius); overflow:hidden; background:#000; aspect-ratio:1; }
+  #video { width:100%; height:100%; object-fit:cover; display:block; }
+  .scan-overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; }
+  .scan-frame { width:60%; height:60%; border:2px solid var(--accent); border-radius:8px; position:relative; box-shadow:0 0 0 9999px rgba(0,0,0,0.4); }
+  .scan-frame::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:var(--accent); animation:scanLine 2s linear infinite; box-shadow:0 0 8px var(--accent); }
+  @keyframes scanLine { 0%{top:0} 100%{top:100%} }
+  .corner { position:absolute; width:16px; height:16px; border-color:var(--accent); border-style:solid; }
+  .corner-tl { top:-2px; left:-2px; border-width:3px 0 0 3px; }
+  .corner-tr { top:-2px; right:-2px; border-width:3px 3px 0 0; }
+  .corner-bl { bottom:-2px; left:-2px; border-width:0 0 3px 3px; }
+  .corner-br { bottom:-2px; right:-2px; border-width:0 3px 3px 0; }
+
+  /* 사진 촬영 모달 */
+  #photo-modal {
+    display:none; position:fixed; inset:0; z-index:300;
+    background:#000; flex-direction:column;
+  }
+  #photo-modal.show { display:flex; }
+  #photo-video { width:100%; flex:1; object-fit:cover; }
+  .photo-modal-header {
+    background:rgba(0,0,0,0.8); padding:14px 20px;
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .photo-modal-tag { font-size:13px; color:var(--accent); font-weight:bold; }
+  .photo-controls { padding:20px; background:#000; display:flex; gap:12px; justify-content:center; align-items:center; }
+  .shutter-btn {
+    width:72px; height:72px; border-radius:50%; border:4px solid white;
+    background:white; cursor:pointer; transition:transform 0.1s;
+    display:flex; align-items:center; justify-content:center; font-size:28px;
+  }
+  .shutter-btn:active { transform:scale(0.9); }
+  .photo-preview-wrap { position:relative; }
+  #photo-preview { width:60px; height:60px; border-radius:8px; object-fit:cover; border:2px solid var(--accent); display:none; }
+  .photo-skip-btn { background:var(--surface2); border:1px solid var(--border); color:var(--text2); padding:10px 18px; border-radius:8px; font-family:'Courier New',monospace; font-size:12px; cursor:pointer; }
+  .photo-confirm-btn { background:var(--accent); border:none; color:#000; padding:10px 18px; border-radius:8px; font-family:'Courier New',monospace; font-size:12px; font-weight:bold; cursor:pointer; display:none; }
+
+  /* 버튼 */
+  .btn { width:100%; padding:14px; border:none; border-radius:var(--radius); font-family:'Courier New',monospace; font-size:13px; font-weight:bold; letter-spacing:1px; cursor:pointer; transition:all 0.15s; text-transform:uppercase; }
+  .btn-primary { background:var(--accent); color:#000; }
+  .btn-primary:active { transform:scale(0.97); opacity:0.85; }
+  .btn-secondary { background:var(--surface2); color:var(--text); border:1px solid var(--border); }
+  .btn-danger { background:var(--danger); color:#fff; }
+  .btn-warn { background:var(--warn); color:#000; }
+  .btn-small { width:auto; padding:8px 14px; font-size:11px; }
+
+  /* 토스트 */
+  #result-toast { position:fixed; bottom:80px; left:16px; right:16px; z-index:200; border-radius:var(--radius); padding:16px; font-size:14px; font-weight:bold; text-align:center; transform:translateY(20px); opacity:0; transition:all 0.3s; pointer-events:none; white-space:pre-line; }
+  #result-toast.show { transform:translateY(0); opacity:1; }
+  #result-toast.success { background:var(--accent); color:#000; }
+  #result-toast.duplicate { background:var(--warn); color:#000; }
+  #result-toast.unknown { background:var(--danger); color:#fff; }
+
+  /* 입력 */
+  .input-group { margin-bottom:12px; }
+  .input-group label { display:block; font-size:11px; color:var(--text2); margin-bottom:6px; letter-spacing:1px; }
+  .input-group input { width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:12px; color:var(--text); font-family:'Courier New',monospace; font-size:14px; }
+  .input-group input:focus { outline:none; border-color:var(--accent); }
+
+  /* 레지스터 */
+  .section-title { font-size:11px; color:var(--text2); letter-spacing:2px; text-transform:uppercase; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; }
+  .register-item { background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius); padding:12px; margin-bottom:8px; display:flex; align-items:center; gap:10px; }
+  .register-item .tag-id { flex:1; font-size:13px; font-weight:bold; color:var(--accent); }
+  .register-item .tag-meta { font-size:10px; color:var(--text2); margin-top:2px; }
+  .register-item .scan-time { font-size:10px; color:var(--text2); text-align:right; white-space:nowrap; }
+  .photo-thumb { width:40px; height:40px; border-radius:6px; object-fit:cover; border:1px solid var(--accent); cursor:pointer; }
+  .photo-placeholder { width:40px; height:40px; border-radius:6px; border:1px dashed var(--border); display:flex; align-items:center; justify-content:center; font-size:16px; color:var(--text2); cursor:pointer; }
+  .badge { display:inline-block; padding:2px 8px; border-radius:20px; font-size:10px; font-weight:bold; }
+  .badge-done { background:rgba(0,212,170,0.15); color:var(--accent); border:1px solid var(--accent); }
+  .badge-type { background:rgba(0,153,255,0.15); color:var(--accent2); border:1px solid var(--accent2); font-size:9px; }
+
+  /* 설정 카드 */
+  .card { background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius); padding:16px; margin-bottom:12px; }
+  .card-title { font-size:11px; color:var(--accent); letter-spacing:2px; text-transform:uppercase; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid var(--border); }
+  .info-row { display:flex; justify-content:space-between; font-size:12px; padding:6px 0; border-bottom:1px solid var(--border); }
+  .info-row:last-child { border-bottom:none; }
+  .info-row .label { color:var(--text2); }
+  .info-row .value { color:var(--text); font-weight:bold; }
+
+  /* 진행률 */
+  .progress-wrap { background:var(--border); border-radius:4px; height:6px; margin:8px 0; }
+  .progress-bar { height:100%; border-radius:4px; background:linear-gradient(90deg,var(--accent),var(--accent2)); transition:width 0.5s ease; }
+
+  .empty-state { text-align:center; padding:40px 20px; color:var(--text2); font-size:12px; line-height:2; }
+  .empty-state .icon { font-size:40px; margin-bottom:12px; }
+  .divider { height:1px; background:var(--border); margin:12px 0; }
+  #canvas { display:none; }
+  .scanner-status { text-align:center; font-size:11px; color:var(--text2); margin-bottom:12px; letter-spacing:1px; }
+  .scanner-status .dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--danger); margin-right:6px; animation:pulse 1s infinite; }
+  .scanner-status.active .dot { background:var(--accent); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .gap-8 { display:flex; flex-direction:column; gap:8px; }
+  .search-input { width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:10px 12px; color:var(--text); font-family:'Courier New',monospace; font-size:12px; margin-bottom:12px; }
+  .search-input:focus { outline:none; border-color:var(--accent); }
+  .filter-tabs { display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
+  .filter-tab { padding:5px 12px; border-radius:20px; font-size:10px; letter-spacing:1px; cursor:pointer; border:1px solid var(--border); color:var(--text2); background:var(--surface2); transition:all 0.15s; }
+  .filter-tab.active { border-color:var(--accent); color:var(--accent); background:rgba(0,212,170,0.1); }
+
+  /* 전체화면 사진 뷰어 */
+  #img-viewer { display:none; position:fixed; inset:0; z-index:400; background:rgba(0,0,0,0.95); align-items:center; justify-content:center; flex-direction:column; }
+  #img-viewer.show { display:flex; }
+  #img-viewer img { max-width:95vw; max-height:80vh; border-radius:8px; }
+  #img-viewer-close { margin-top:20px; background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:10px 24px; border-radius:8px; font-family:'Courier New',monospace; cursor:pointer; }
+
+  /* ZIP 내보내기 버튼 상태 */
+  .export-status { font-size:11px; color:var(--text2); margin-top:8px; text-align:center; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">⬡ TAG SCANNER</div>
+  <div class="stats-bar">
+    <div class="stat-item">스캔 <span id="hdr-scanned">0</span></div>
+    <div class="stat-item">📷 <span id="hdr-photos">0</span></div>
+    <div class="stat-item">전체 <span id="hdr-total">0</span></div>
+  </div>
+</header>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('scan')">📷 스캔</div>
+  <div class="tab" onclick="switchTab('register')">📋 레지스터</div>
+  <div class="tab" onclick="switchTab('settings')">⚙️ 설정</div>
+</div>
+
+<!-- SCAN PAGE -->
+<div class="page active" id="page-scan">
+  <div class="camera-container">
+    <video id="video" playsinline autoplay muted></video>
+    <canvas id="canvas"></canvas>
+    <div class="scan-overlay">
+      <div class="scan-frame">
+        <div class="corner corner-tl"></div>
+        <div class="corner corner-tr"></div>
+        <div class="corner corner-bl"></div>
+        <div class="corner corner-br"></div>
+      </div>
+    </div>
+  </div>
+  <div class="scanner-status" id="scanner-status">
+    <span class="dot"></span>카메라 대기 중
+  </div>
+  <div class="gap-8">
+    <button class="btn btn-primary" id="btn-camera" onclick="toggleCamera()">📷 카메라 시작</button>
+  </div>
+  <div class="divider"></div>
+  <div class="input-group">
+    <label>수동 입력 (TAG 번호 직접 입력)</label>
+    <input type="text" id="manual-input" placeholder="101290-ABJ-20640" autocomplete="off" autocapitalize="characters">
+  </div>
+  <button class="btn btn-secondary" onclick="manualScan()">✓ 수동 등록</button>
+</div>
+
+<!-- REGISTER PAGE -->
+<div class="page" id="page-register">
+  <div class="section-title">
+    <span>스캔 레지스터</span>
+    <button class="btn btn-small btn-secondary" onclick="clearRegister()">초기화</button>
+  </div>
+  <input type="text" class="search-input" id="search-input" placeholder="TAG 검색..." oninput="renderRegister()">
+  <div class="filter-tabs">
+    <div class="filter-tab active" onclick="setFilter('all', this)">전체</div>
+    <div class="filter-tab" onclick="setFilter('scanned', this)">스캔완료</div>
+    <div class="filter-tab" onclick="setFilter('pending', this)">미스캔</div>
+    <div class="filter-tab" onclick="setFilter('nophoto', this)">사진없음</div>
+  </div>
+  <div class="progress-wrap">
+    <div class="progress-bar" id="progress-bar" style="width:0%"></div>
+  </div>
+  <div style="font-size:11px; color:var(--text2); text-align:right; margin-bottom:12px;">
+    <span id="progress-text">0 / 0 완료</span>
+  </div>
+  <div id="register-list"></div>
+</div>
+
+<!-- SETTINGS PAGE -->
+<div class="page" id="page-settings">
+  <div class="card">
+    <div class="card-title">📊 현황</div>
+    <div class="info-row"><span class="label">전체 TAG</span><span class="value" id="s-total">-</span></div>
+    <div class="info-row"><span class="label">스캔 완료</span><span class="value" id="s-scanned">-</span></div>
+    <div class="info-row"><span class="label">사진 촬영</span><span class="value" id="s-photos">-</span></div>
+    <div class="info-row"><span class="label">잔여</span><span class="value" id="s-remain">-</span></div>
+    <div class="info-row"><span class="label">진행률</span><span class="value" id="s-pct">-</span></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📦 ZIP 내보내기</div>
+    <p style="font-size:11px; color:var(--text2); margin-bottom:12px; line-height:1.7;">
+      스캔 CSV + 사진 폴더를 ZIP으로 묶어 다운로드합니다.<br>
+      Gmail로 전송 후 서버에 업로드하세요.
+    </p>
+    <button class="btn btn-primary" id="btn-export-zip" onclick="exportZip()">📦 ZIP 내보내기</button>
+    <div class="export-status" id="export-status"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔄 서버 연결</div>
+    <p style="font-size:11px; color:var(--text2); margin-bottom:12px; line-height:1.6;">
+      서버에서 TAG 목록과 완료 현황을 불러옵니다.
+    </p>
+    <button class="btn btn-secondary" onclick="loadFromServer()">서버 데이터 새로고침</button>
+    <div style="font-size:11px; color:var(--text2); margin-top:8px;" id="master-status">서버 연결 중...</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">👤 스캐너 정보</div>
+    <div class="input-group">
+      <label>스캐너 이름 (작업자명)</label>
+      <input type="text" id="scanner-name" placeholder="홍길동" oninput="saveScannerName()">
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">⚠️ 초기화</div>
+    <div class="gap-8">
+      <button class="btn btn-secondary" onclick="clearRegister()">스캔 기록 초기화</button>
+      <button class="btn btn-danger" onclick="resetAll()">전체 데이터 초기화</button>
+    </div>
+  </div>
+</div>
+
+<!-- 사진 촬영 모달 -->
+<div id="photo-modal">
+  <div class="photo-modal-header">
+    <div>
+      <div style="font-size:11px; color:var(--text2); margin-bottom:2px;">제품 사진 촬영</div>
+      <div class="photo-modal-tag" id="photo-modal-tag">-</div>
+    </div>
+    <div style="font-size:11px; color:var(--text2); text-align:right;">
+      카메라를 제품에<br>가까이 대고 촬영
+    </div>
+  </div>
+  <video id="photo-video" playsinline autoplay muted></video>
+  <canvas id="photo-canvas" style="display:none"></canvas>
+  <div class="photo-controls">
+    <button class="photo-skip-btn" onclick="skipPhoto()">건너뛰기</button>
+    <button class="shutter-btn" onclick="capturePhoto()">📷</button>
+    <div class="photo-preview-wrap">
+      <img id="photo-preview" src="" alt="미리보기">
+      <button class="photo-confirm-btn" id="photo-confirm-btn" onclick="confirmPhoto()">✓ 확인</button>
+    </div>
+  </div>
+</div>
+
+<!-- 전체화면 이미지 뷰어 -->
+<div id="img-viewer">
+  <img id="img-viewer-img" src="" alt="">
+  <button id="img-viewer-close" onclick="closeViewer()">닫기</button>
+</div>
+
+<div id="result-toast"></div>
+
+<script>
+// ─── CONFIG ─────────────────────────────────────────────────
+const SERVER_URL = window.location.origin;
+
+// ─── STATE ──────────────────────────────────────────────────
+let MASTER_TAGS = [];
+const tagMap = {};
+let scanRegister = {};     // TAG -> scan info
+let photoStore = {};       // TAG -> base64 jpeg (세션 메모리)
+let masterCompleted = {};
+let cameraActive = false;
+let zxingReader = null;
+let scanCooldown = false;
+let currentFilter = 'all';
+let pendingPhotoTag = null; // 사진 촬영 대기 중인 TAG
+let photoStream = null;
+
+// ─── API ────────────────────────────────────────────────────
+async function apiFetch(url, method='GET', body=null) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(SERVER_URL + url, opts);
+  return res.json();
+}
+
+// ─── LOCAL STORAGE ──────────────────────────────────────────
+function saveLocal() {
+  try {
+    localStorage.setItem('qr_register', JSON.stringify(scanRegister));
+    localStorage.setItem('qr_scanner_name', document.getElementById('scanner-name').value || '');
+  } catch(e) {}
+}
+
+function loadLocal() {
+  try {
+    const r = localStorage.getItem('qr_register');
+    if (r) scanRegister = JSON.parse(r);
+    const n = localStorage.getItem('qr_scanner_name');
+    if (n) document.getElementById('scanner-name').value = n;
+  } catch(e) {}
+}
+
+function saveScannerName() { saveLocal(); }
+
+// ─── SERVER LOAD ─────────────────────────────────────────────
+async function loadFromServer() {
+  try {
+    const [tags, scans] = await Promise.all([
+      apiFetch('/api/tags'),
+      apiFetch('/api/scans')
+    ]);
+    MASTER_TAGS.length = 0;
+    Object.keys(tagMap).forEach(k => delete tagMap[k]);
+    tags.forEach(t => { MASTER_TAGS.push(t); tagMap[t.TAG] = t; });
+    masterCompleted = scans;
+    updateHeader();
+    document.getElementById('master-status').textContent =
+      '✅ 서버 연결됨 (' + tags.length + '개 TAG)';
+  } catch(e) {
+    document.getElementById('master-status').textContent = '❌ 서버 연결 실패';
+  }
+}
+
+// ─── QR 카메라 ───────────────────────────────────────────────
+async function toggleCamera() {
+  if (cameraActive) { stopCamera(); } else { await startCamera(); }
+}
+
+async function startCamera() {
+  try {
+    const hints = new Map();
+    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+    zxingReader = new ZXing.BrowserQRCodeReader(hints);
+    cameraActive = true;
+    document.getElementById('btn-camera').textContent = '⏹ 카메라 중지';
+    const status = document.getElementById('scanner-status');
+    status.className = 'scanner-status active';
+    status.innerHTML = '<span class="dot"></span>스캔 중...';
+    await zxingReader.decodeFromConstraints(
+      { video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } },
+      document.getElementById('video'),
+      (result, err) => {
+        if (result && !scanCooldown) {
+          processTag(result.getText().trim());
+          scanCooldown = true;
+          setTimeout(() => { scanCooldown = false; }, 2500);
+        }
+      }
+    );
+  } catch(e) {
+    showToast('카메라 접근 권한이 필요합니다.', 'unknown');
+    cameraActive = false;
+    document.getElementById('btn-camera').textContent = '📷 카메라 시작';
+  }
+}
+
+function stopCamera() {
+  if (zxingReader) { zxingReader.reset(); zxingReader = null; }
+  cameraActive = false;
+  document.getElementById('btn-camera').textContent = '📷 카메라 시작';
+  const status = document.getElementById('scanner-status');
+  status.className = 'scanner-status';
+  status.innerHTML = '<span class="dot"></span>카메라 대기 중';
+}
+
+// ─── TAG 처리 ────────────────────────────────────────────────
+function processTag(tagId) {
+  const tag = tagId.toUpperCase().trim();
+  if (!tagMap[tag]) {
+    showToast('❌ 미등록 TAG\n' + tag, 'unknown');
+    vibrate([100, 50, 100]);
+    return;
+  }
+  if (masterCompleted[tag]) {
+    showToast('⚠️ 기 완료된 TAG\n' + tag, 'duplicate');
+    vibrate([200, 100, 200]);
+    return;
+  }
+  if (scanRegister[tag]) {
+    showToast('⚠️ 이미 스캔한 TAG\n' + tag, 'duplicate');
+    vibrate([200, 100, 200]);
+    return;
+  }
+  const info = tagMap[tag];
+  const now = new Date();
+  const timeStr = now.toLocaleString('ko-KR', {
+    year:'2-digit', month:'2-digit', day:'2-digit',
+    hour:'2-digit', minute:'2-digit', second:'2-digit'
+  });
+  const scannerName = document.getElementById('scanner-name').value || '미지정';
+  scanRegister[tag] = {
+    TAG: tag, TYPE: info.TYPE, 'RFQ NO': info['RFQ NO'],
+    scanTime: timeStr, scanner: scannerName, status: '완료'
+  };
+  saveLocal();
+  updateHeader();
+  showToast('✅ 스캔 완료!\n' + tag + '\n사진을 촬영합니다...', 'success');
+  vibrate([50]);
+
+  // QR 카메라 일시 중지 후 사진 촬영 모드로 전환
+  setTimeout(() => openPhotoModal(tag), 1200);
+}
+
+function manualScan() {
+  const val = document.getElementById('manual-input').value.trim().toUpperCase();
+  if (!val) return;
+  processTag(val);
+  document.getElementById('manual-input').value = '';
+}
+
+document.getElementById('manual-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') manualScan();
+});
+
+// ─── 사진 촬영 모달 ──────────────────────────────────────────
+async function openPhotoModal(tag) {
+  pendingPhotoTag = tag;
+  document.getElementById('photo-modal-tag').textContent = tag;
+  document.getElementById('photo-preview').style.display = 'none';
+  document.getElementById('photo-confirm-btn').style.display = 'none';
+
+  const modal = document.getElementById('photo-modal');
+  modal.classList.add('show');
+
+  try {
+    photoStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
+    });
+    document.getElementById('photo-video').srcObject = photoStream;
+  } catch(e) {
+    showToast('카메라를 열 수 없습니다.', 'unknown');
+    closePhotoModal();
+  }
+}
+
+function closePhotoModal() {
+  if (photoStream) {
+    photoStream.getTracks().forEach(t => t.stop());
+    photoStream = null;
+  }
+  document.getElementById('photo-modal').classList.remove('show');
+  pendingPhotoTag = null;
+}
+
+function capturePhoto() {
+  const video = document.getElementById('photo-video');
+  const canvas = document.getElementById('photo-canvas');
+
+  // 저화질 압축: 최대 800px, JPEG 품질 50%
+  const maxW = 800, maxH = 800;
+  let w = video.videoWidth, h = video.videoHeight;
+  if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
+  if (h > maxH) { w = Math.round(w * maxH / h); h = maxH; }
+
+  canvas.width = w;
+  canvas.height = h;
+  canvas.getContext('2d').drawImage(video, 0, 0, w, h);
+
+  const base64 = canvas.toDataURL('image/jpeg', 0.5); // 품질 50%
+  const preview = document.getElementById('photo-preview');
+  preview.src = base64;
+  preview.style.display = 'block';
+  document.getElementById('photo-confirm-btn').style.display = 'block';
+
+  vibrate([30]);
+}
+
+function confirmPhoto() {
+  if (!pendingPhotoTag) return;
+  const base64 = document.getElementById('photo-preview').src;
+  photoStore[pendingPhotoTag] = base64;
+  closePhotoModal();
+  updateHeader();
+  renderRegister();
+  showToast('📷 사진 저장 완료!\n' + pendingPhotoTag, 'success');
+}
+
+function skipPhoto() {
+  closePhotoModal();
+  showToast('사진 없이 등록됨\n' + (pendingPhotoTag || ''), 'duplicate');
+}
+
+// 사진 다시 촬영 (레지스터에서 호출)
+function retakePhoto(tag) {
+  openPhotoModal(tag);
+}
+
+// ─── 이미지 뷰어 ─────────────────────────────────────────────
+function openViewer(src) {
+  document.getElementById('img-viewer-img').src = src;
+  document.getElementById('img-viewer').classList.add('show');
+}
+function closeViewer() {
+  document.getElementById('img-viewer').classList.remove('show');
+}
+
+// ─── UI 공통 ────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    t.classList.toggle('active', ['scan','register','settings'][i] === name);
+  });
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  if (name === 'register') renderRegister();
+  if (name === 'settings') updateSettings();
+}
+
+function showToast(msg, type) {
+  const t = document.getElementById('result-toast');
+  t.textContent = msg;
+  t.className = 'show ' + type;
+  setTimeout(() => { t.className = ''; }, 2500);
+}
+
+function vibrate(pattern) {
+  if (navigator.vibrate) navigator.vibrate(pattern);
+}
+
+function updateHeader() {
+  document.getElementById('hdr-scanned').textContent = Object.keys(scanRegister).length;
+  document.getElementById('hdr-photos').textContent = Object.keys(photoStore).length;
+  document.getElementById('hdr-total').textContent = MASTER_TAGS.length;
+}
+
+function setFilter(f, el) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  renderRegister();
+}
+
+function renderRegister() {
+  const search = document.getElementById('search-input').value.trim().toUpperCase();
+  const list = document.getElementById('register-list');
+  const allItems = MASTER_TAGS.map(t => {
+    const done = scanRegister[t.TAG] ||
+      (masterCompleted[t.TAG]
+        ? { ...t, scanTime: '서버완료', scanner: '-', status: '완료(서버)' }
+        : null);
+    return { info: t, scan: done };
+  });
+
+  const filtered = allItems.filter(item => {
+    if (search && !item.info.TAG.includes(search)) return false;
+    if (currentFilter === 'scanned' && !item.scan) return false;
+    if (currentFilter === 'pending' && item.scan) return false;
+    if (currentFilter === 'nophoto' && (!item.scan || photoStore[item.info.TAG])) return false;
+    return true;
+  });
+
+  const scannedCount = Object.keys(scanRegister).length + Object.keys(masterCompleted).length;
+  const pct = MASTER_TAGS.length ? Math.round(scannedCount / MASTER_TAGS.length * 100) : 0;
+  document.getElementById('progress-bar').style.width = pct + '%';
+  document.getElementById('progress-text').textContent =
+    scannedCount + ' / ' + MASTER_TAGS.length + ' 완료 (' + pct + '%)';
+
+  if (filtered.length === 0) {
+    list.innerHTML = '<div class="empty-state"><div class="icon">📭</div>결과 없음</div>';
+    return;
+  }
+
+  list.innerHTML = filtered.map(item => {
+    const isDone = !!item.scan;
+    const isServerDone = masterCompleted[item.info.TAG];
+    const hasPhoto = !!photoStore[item.info.TAG];
+    const photoBtn = isDone
+      ? (hasPhoto
+          ? `<img class="photo-thumb" src="${photoStore[item.info.TAG]}"
+               onclick="openViewer('${photoStore[item.info.TAG]}')" alt="사진">`
+          : `<div class="photo-placeholder" onclick="retakePhoto('${item.info.TAG}')">📷</div>`)
+      : '';
+
+    return `<div class="register-item">
+      ${photoBtn}
+      <div style="flex:1">
+        <div class="tag-id">${item.info.TAG}</div>
+        <div class="tag-meta">
+          <span class="badge badge-type">${item.info.TYPE}</span>
+          &nbsp;${item.info['RFQ NO']}
+        </div>
+        ${isDone ? `<div class="tag-meta" style="margin-top:4px;">👤 ${item.scan.scanner || '-'}</div>` : ''}
+      </div>
+      <div style="text-align:right">
+        ${isDone
+          ? `<span class="badge badge-done">${isServerDone ? '서버완료' : '완료'}</span>`
+          : '<span style="color:var(--text2);font-size:11px;">미완료</span>'}
+        ${isDone ? `<div class="scan-time">${item.scan.scanTime || ''}</div>` : ''}
+        ${hasPhoto ? '<div style="font-size:9px;color:var(--accent);margin-top:2px;">📷사진있음</div>' : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function updateSettings() {
+  const scanned = Object.keys(scanRegister).length + Object.keys(masterCompleted).length;
+  const photos = Object.keys(photoStore).length;
+  const remain = MASTER_TAGS.length - scanned;
+  const pct = MASTER_TAGS.length ? Math.round(scanned / MASTER_TAGS.length * 100) : 0;
+  document.getElementById('s-total').textContent = MASTER_TAGS.length;
+  document.getElementById('s-scanned').textContent = scanned;
+  document.getElementById('s-photos').textContent = photos;
+  document.getElementById('s-remain').textContent = remain;
+  document.getElementById('s-pct').textContent = pct + '%';
+}
+
+// ─── ZIP 내보내기 ────────────────────────────────────────────
+async function exportZip() {
+  const scanCount = Object.keys(scanRegister).length;
+  if (scanCount === 0) {
+    alert('스캔된 TAG가 없습니다.');
+    return;
+  }
+
+  const btn = document.getElementById('btn-export-zip');
+  const status = document.getElementById('export-status');
+  btn.textContent = '⏳ ZIP 생성 중...';
+  btn.disabled = true;
+  status.textContent = '';
+
+  try {
+    const zip = new JSZip();
+
+    // ── CSV 생성 ──────────────────────────────────────────
+    const headers = ['TAG', 'TYPE', 'RFQ NO', '스캔일시', '스캐너', '상태', '사진파일'];
+    const rows = Object.values(scanRegister).map(r => {
+      const hasPhoto = !!photoStore[r.TAG];
+      return [
+        r.TAG, r.TYPE, r['RFQ NO'], r.scanTime, r.scanner, r.status,
+        hasPhoto ? r.TAG + '.jpg' : ''
+      ].map(v => '"' + v + '"').join(',');
+    });
+    const csv = '\uFEFF' + [headers.join(','), ...rows].join('\n');
+    const now = new Date().toISOString().slice(0,16).replace('T','_').replace(':','');
+    zip.file('scan_register_' + now + '.csv', csv);
+
+    // ── 사진 추가 ─────────────────────────────────────────
+    const photoFolder = zip.folder('photos');
+    const photoTags = Object.keys(photoStore);
+    status.textContent = `사진 ${photoTags.length}장 처리 중...`;
+
+    for (const tag of photoTags) {
+      const base64Data = photoStore[tag].split(',')[1]; // "data:image/jpeg;base64," 제거
+      photoFolder.file(tag + '.jpg', base64Data, { base64: true });
+    }
+
+    // ── ZIP 다운로드 ──────────────────────────────────────
+    status.textContent = 'ZIP 압축 중...';
+    const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'scan_' + now + '.zip';
+    a.click();
+    URL.revokeObjectURL(url);
+
+    status.textContent = `✅ 완료! CSV ${scanCount}건 + 사진 ${photoTags.length}장`;
+    showToast('📦 ZIP 다운로드 완료!\nGmail로 전송 후 서버에 업로드하세요.', 'success');
+
+  } catch(e) {
+    status.textContent = '❌ 오류: ' + e.message;
+    showToast('ZIP 생성 실패', 'unknown');
+  } finally {
+    btn.textContent = '📦 ZIP 내보내기';
+    btn.disabled = false;
+  }
+}
+
+// ─── 초기화 ─────────────────────────────────────────────────
+function clearRegister() {
+  if (!confirm('이번 세션 스캔 기록을 초기화할까요?\n(사진도 함께 삭제됩니다)')) return;
+  scanRegister = {};
+  photoStore = {};
+  saveLocal();
+  updateHeader();
+  renderRegister();
+}
+
+function resetAll() {
+  if (!confirm('⚠️ 모든 로컬 데이터를 초기화합니다.')) return;
+  scanRegister = {};
+  photoStore = {};
+  localStorage.clear();
+  document.getElementById('master-status').textContent = '서버에서 로드 중...';
+  updateHeader();
+  alert('초기화 완료');
+}
+
+// ─── INIT ────────────────────────────────────────────────────
+loadLocal();
+loadFromServer();
+</script>
+</body>
+</html>
